@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "LeetVault",
+  "version": "0.1.0",
+  "description": "Automatically save your LeetCode solutions to a local folder on every Run/Submit.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://leetcode.com/problems/*"],
+      "js": ["content/page-bridge.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://leetcode.com/problems/*"],
+      "js": [
+        "content/extractor.js",
+        "content/observer.js",
+        "content/main.js"
+      ],
+      "css": ["content/toast.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

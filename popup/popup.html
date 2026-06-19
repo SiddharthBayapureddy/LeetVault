@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LeetVault</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="popup">
+
+    <!-- ============================================================ -->
+    <!--  Header                                                      -->
+    <!-- ============================================================ -->
+    <header class="header">
+      <div class="header__brand">
+        <img src="../icons/icon48.png" alt="" class="header__logo" />
+        <div>
+          <h1 class="header__title">LeetVault</h1>
+          <p class="header__tagline">Local backup for your solutions</p>
+        </div>
+      </div>
+      <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">
+        <svg id="icon-sun" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+        </svg>
+        <svg id="icon-moon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- ============================================================ -->
+    <!--  Folder section                                              -->
+    <!-- ============================================================ -->
+    <section class="card" id="folder-section">
+      <h2 class="card__label">
+        <svg class="icon icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        Save Folder
+      </h2>
+
+      <!-- State: no folder chosen -->
+      <div id="folder-empty" class="folder-state">
+        <p class="text-muted">No folder selected yet.</p>
+        <button id="pick-folder-btn" class="btn btn--primary">Choose Folder</button>
+      </div>
+
+      <!-- State: folder active -->
+      <div id="folder-active" class="folder-state" hidden>
+        <div class="folder-path" id="folder-path" title=""></div>
+        <div class="folder-actions">
+          <button id="change-folder-btn" class="btn btn--ghost btn--sm">Change</button>
+          <span class="badge badge--ok" id="folder-badge-ok">Connected</span>
+          <span class="badge badge--warn" id="folder-badge-warn" hidden>Reconnect needed</span>
+        </div>
+      </div>
+
+      <!-- State: needs reconnect -->
+      <div id="folder-reconnect" class="folder-state" hidden>
+        <p class="text-muted">Folder access expired.</p>
+        <button id="reconnect-btn" class="btn btn--warning">Reconnect Folder</button>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!--  Settings                                                    -->
+    <!-- ============================================================ -->
+    <section class="card">
+      <h2 class="card__label">
+        <svg class="icon icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </h2>
+
+      <!-- Org mode -->
+      <div class="field">
+        <label for="org-mode" class="field__label">Folder organisation</label>
+        <select id="org-mode" class="select">
+          <option value="flat">Flat (all in root)</option>
+          <option value="difficulty">By difficulty</option>
+          <option value="category">By category / tag</option>
+          <option value="hybrid">Hybrid (category → difficulty)</option>
+        </select>
+      </div>
+
+      <!-- Toggles -->
+      <div class="field field--row">
+        <label for="toggle-status" class="field__label">Status tag in filename</label>
+        <label class="switch">
+          <input type="checkbox" id="toggle-status" />
+          <span class="switch__track"></span>
+        </label>
+      </div>
+
+      <div class="field field--row">
+        <label for="toggle-desc" class="field__label">Problem description header</label>
+        <label class="switch">
+          <input type="checkbox" id="toggle-desc" />
+          <span class="switch__track"></span>
+        </label>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!--  Stats                                                       -->
+    <!-- ============================================================ -->
+    <section class="card" id="stats-section">
+      <h2 class="card__label">
+        <svg class="icon icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Stats
+      </h2>
+
+      <div class="stats-grid">
+        <div class="stat">
+          <span class="stat__value" id="stat-total">0</span>
+          <span class="stat__label">Saved</span>
+        </div>
+        <div class="stat stat--easy">
+          <span class="stat__value" id="stat-easy">0</span>
+          <span class="stat__label">Easy</span>
+        </div>
+        <div class="stat stat--medium">
+          <span class="stat__value" id="stat-medium">0</span>
+          <span class="stat__label">Medium</span>
+        </div>
+        <div class="stat stat--hard">
+          <span class="stat__value" id="stat-hard">0</span>
+          <span class="stat__label">Hard</span>
+        </div>
+      </div>
+
+      <div class="streak-row">
+        <span class="streak-icon">🔥</span>
+        <span id="streak-value" class="streak-text">0-day streak</span>
+      </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!--  Actions                                                     -->
+    <!-- ============================================================ -->
+    <section class="actions">
+      <button id="export-btn" class="btn btn--ghost btn--sm" title="Export settings as JSON">
+        <svg class="icon icon--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export Config
+      </button>
+      <button id="import-btn" class="btn btn--ghost btn--sm" title="Import settings from JSON">
+        <svg class="icon icon--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import Config
+      </button>
+      <button id="stats-btn" class="btn btn--ghost btn--sm" title="Download stats snapshot">
+        <svg class="icon icon--xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Stats
+      </button>
+    </section>
+
+    <!-- Hidden file input for config import -->
+    <input type="file" id="import-file" accept=".json" hidden />
+
+    <!-- Snackbar -->
+    <div id="snackbar" class="snackbar" aria-live="polite"></div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

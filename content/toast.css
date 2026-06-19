@@ -1,0 +1,64 @@
+/*
+ * LeetVault — Toast Notification Styles
+ *
+ * Injected into LeetCode pages via the content-script CSS entry.
+ * Uses a high z-index and fixed positioning to float above LC's UI.
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Base toast                                                        */
+/* ------------------------------------------------------------------ */
+
+.leetvault-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2147483647;           /* max — stay above everything */
+  max-width: 420px;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               Oxygen, Ubuntu, Cantarell, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: #e2e8f0;
+  background: #1e1e2e;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35),
+              0 2px 8px  rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
+  transition: opacity 0.3s ease,
+              transform 0.3s ease;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Visible (enter) state                                             */
+/* ------------------------------------------------------------------ */
+
+.leetvault-toast--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Colour accents via left border                                    */
+/* ------------------------------------------------------------------ */
+
+.leetvault-toast--success {
+  border-left: 4px solid #00b894;
+}
+
+.leetvault-toast--error {
+  border-left: 4px solid #e74c3c;
+}
+
+.leetvault-toast--warn {
+  border-left: 4px solid #fdcb6e;
+  color: #ffeaa7;
+}
+
+.leetvault-toast--info {
+  border-left: 4px solid #74b9ff;
+}
