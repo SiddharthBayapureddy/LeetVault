@@ -9,7 +9,7 @@
 import { getDirectoryHandle }  from '../lib/storage.js';
 import { writeSolutionFile }   from '../lib/file-writer.js';
 import { DEFAULT_SETTINGS }    from '../lib/constants.js';
-import { recordSave }          from '../lib/stats.js';
+import { recordAttempt }       from '../lib/stats.js';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -49,26 +49,26 @@ async function verifyPermission(handle) {
 /**
  * SAVE_SOLUTION — the core save pipeline.
  */
-async function handleSave(data) {
+async function handleSaveSolution(data, settings, attemptMeta) {
   // 1. Retrieve stored directory handle
   const handle = await getDirectoryHandle();
   if (!handle) {
-    return { success: false, error: 'NO_DIRECTORY' };
+    throw new Error('NO_DIRECTORY');
   }
 
   // 2. Check we still have permission
   if (!(await verifyPermission(handle))) {
-    return { success: false, error: 'PERMISSION_DENIED' };
+    throw new Error('PERMISSION_DENIED');
   }
 
-  // 3. Load user settings
-  const settings = await getSettings();
-
-  // 4. Write the file
+  // 3. Write the file
   const result = await writeSolutionFile(handle, data, settings);
 
-  // 5. Update stats (non-blocking — failures are swallowed inside)
-  await recordSave(data);
+  // 4. Update stats
+  if (attemptMeta) {
+    attemptMeta.savedToDisk = true;
+    await recordAttempt(data, attemptMeta);
+  }
 
   return { success: true, ...result };
 }
@@ -88,18 +88,29 @@ async function handleCheckDirectory() {
 /* ------------------------------------------------------------------ */
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  const route = {
-    SAVE_SOLUTION:   () => handleSave(message.data),
-    CHECK_DIRECTORY: () => handleCheckDirectory(),
-  }[message.type];
-
-  if (route) {
-    route()
+  if (message.type === 'SAVE_SOLUTION') {
+    handleSaveSolution(message.data, message.settings, message.attemptMeta)
       .then(sendResponse)
       .catch((err) => {
         console.error('[LeetVault] Error handling', message.type, err);
         sendResponse({ success: false, error: err.message });
       });
-    return true;   // keep the message channel open for the async response
+    return true;
+  } else if (message.type === 'LOG_ATTEMPT') {
+    recordAttempt(message.data, message.attemptMeta)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => {
+        console.error('[LeetVault] Error logging attempt', err);
+        sendResponse({ success: false, error: err.message });
+      });
+    return true;
+  } else if (message.type === 'CHECK_DIRECTORY') {
+    handleCheckDirectory()
+      .then(sendResponse)
+      .catch((err) => {
+        console.error('[LeetVault] Error checking directory', err);
+        sendResponse({ success: false, error: err.message });
+      });
+    return true;
   }
 });

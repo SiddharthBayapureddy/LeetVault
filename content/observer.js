@@ -12,10 +12,7 @@
 LV.observer = (() => {
   'use strict';
 
-  /** Callback supplied by main.js:  (triggerType: 'run'|'submit') => void */
-  let _onTrigger = null;
-
-  /** MutationObserver instance (created once). */
+  let _lastAction = null;
   let _mo = null;
 
   /** Track last-known URL so we can detect SPA navigations. */
@@ -64,7 +61,7 @@ LV.observer = (() => {
     if (!btn || _attached.has(btn)) return;
     _attached.add(btn);
     btn.addEventListener('click', () => {
-      if (_onTrigger) _onTrigger(type);
+      _lastAction = type;
     }, { capture: true });
   }
 
@@ -113,12 +110,11 @@ LV.observer = (() => {
    *
    * @param {(type: 'run'|'submit') => void} callback
    */
-  function init(callback) {
-    _onTrigger = callback;
+  function init() {
     scan();
     startMutationObserver();
     watchUrlChanges();
   }
 
-  return { init };
+  return { init, getLastAction: () => _lastAction };
 })();

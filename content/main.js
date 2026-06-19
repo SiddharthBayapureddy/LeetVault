@@ -26,34 +26,100 @@
    *  2. Send to background service-worker for file write
    *  3. Show success / error toast
    */
-  async function onSaveTrigger(triggerType) {
-    if (saving) return;
-    saving = true;
+  async function onSaveTrigger(triggerType, force = false) {
+    if (saving) return { success: false, error: 'Already saving' };
 
     try {
-      // 1 — Extract
-      const data      = await LV.extractor.extractAll();
-      data.triggerType = triggerType;
+      const { settings } = await chrome.storage.local.get('settings');
+      if (!force && settings && settings.autoSave === false) {
+        return { success: false, error: 'Autosave disabled' };
+      }
+      
+      saving = true;
+      const data = await LV.extractor.extractAll();
+      
+      const attemptMeta = {
+        action: triggerType,
+        result: data.statusTag || 'Unknown'
+      };
 
-      // 2 — Delegate write to service-worker
-      const response = await chrome.runtime.sendMessage({
+      const response = await sendToBackground({
         type: 'SAVE_SOLUTION',
         data,
+        settings,
+        attemptMeta
       });
 
-      // 3 — Surface result
       if (response?.success) {
+        chrome.storage.local.set({ lastSaveResult: 'success' });
         showToast(`✓ Saved → ${response.fullPath}`, 'success');
+        return { success: true };
       } else {
+        chrome.storage.local.set({ lastSaveResult: 'error' });
         handleError(response);
+        return { success: false, error: response?.error || 'Save failed' };
       }
     } catch (err) {
       console.error('[LeetVault]', err);
+      chrome.storage.local.set({ lastSaveResult: 'error' });
       showToast(`Save failed: ${err.message}`, 'error');
+      return { success: false, error: err.message };
     } finally {
       saving = false;
     }
   }
+
+  document.addEventListener('leetvault:result', async (e) => {
+    const data = e.detail;
+    const action = LV.observer.getLastAction() || 'run';
+    const result = data.status_msg || 'Unknown';
+    
+    try {
+      const extracted = await LV.extractor.extractAll();
+      extracted.statusTag = result; // High fidelity tag from API
+      
+      const attemptMeta = { action, result };
+
+      if (action === 'submit' && result === 'Accepted') {
+        const { settings } = await chrome.storage.local.get('settings');
+        if (settings && settings.autoSave !== false) {
+          saving = true;
+          const res = await sendToBackground({
+            type: 'SAVE_SOLUTION',
+            data: extracted,
+            settings,
+            attemptMeta
+          });
+          saving = false;
+          
+          if (res?.success) {
+            chrome.storage.local.set({ lastSaveResult: 'success' });
+            showToast(`✓ Saved → ${res.fullPath}`, 'success');
+          } else {
+            chrome.storage.local.set({ lastSaveResult: 'error' });
+            handleError(res);
+          }
+          return;
+        }
+      }
+
+      // If not autosaved, log attempt only
+      await sendToBackground({
+        type: 'LOG_ATTEMPT',
+        data: extracted,
+        attemptMeta
+      });
+    } catch (err) {
+      console.error('[LeetVault] Result interception failed:', err);
+    }
+  });
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'MANUAL_SAVE') {
+      onSaveTrigger('manual', true).then(sendResponse);
+      return true; // Keeps channel open for async response
+    }
+  });
 
   /** Map specific service-worker error codes to user-friendly messages. */
   function handleError(response) {

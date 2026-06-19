@@ -1,23 +1,11 @@
 /**
  * LeetVault — Popup Script
- *
- * Handles:
- *  • Folder picker / reconnect (File System Access API + IndexedDB)
- *  • Settings persistence (chrome.storage.local)
- *  • Theme toggle (dark / light / system)
- *  • Stats display
- *  • Config export / import
- *  • Stats download
- *
- * The popup shares the extension's origin so it can access the same
- * IndexedDB that the service-worker uses for the directory handle.
  */
 (() => {
   'use strict';
 
   /* ================================================================ */
-  /*  IndexedDB — duplicated from lib/storage.js because the popup    */
-  /*  loads as a classic script (not an ES module)                     */
+  /*  IndexedDB
   /* ================================================================ */
 
   const DB_NAME    = 'LeetVaultDB';
@@ -60,23 +48,21 @@
   }
 
   /* ================================================================ */
-  /*  Default settings (must match lib/constants.js)                  */
+  /*  Default settings
   /* ================================================================ */
 
   const DEFAULT_SETTINGS = {
     orgMode:            'flat',
     includeStatusTag:   false,
-    includeDescription: false,
-    theme:              'system',
+    includeDescription: false
   };
 
   /* ================================================================ */
-  /*  DOM references                                                  */
+  /*  DOM references
   /* ================================================================ */
 
   const $  = (sel) => document.querySelector(sel);
   const el = {
-    themeToggle:   $('#theme-toggle'),
     pickFolder:    $('#pick-folder-btn'),
     changeFolder:  $('#change-folder-btn'),
     reconnect:     $('#reconnect-btn'),
@@ -84,8 +70,7 @@
     folderActive:  $('#folder-active'),
     folderReconn:  $('#folder-reconnect'),
     folderPath:    $('#folder-path'),
-    badgeOk:       $('#folder-badge-ok'),
-    badgeWarn:     $('#folder-badge-warn'),
+    folderStatusBar: $('#folder-status-bar'),
     orgMode:       $('#org-mode'),
     toggleStatus:  $('#toggle-status'),
     toggleDesc:    $('#toggle-desc'),
@@ -99,10 +84,15 @@
     statHard:      $('#stat-hard'),
     streakValue:   $('#streak-value'),
     snackbar:      $('#snackbar'),
+    powerToggle:   $('#power-toggle'),
+    powerToggleState: $('#power-toggle-state'),
+    manualSaveBtn: $('#manual-save-btn'),
+    inlineLog:     $('#inline-log'),
+    titleEasterEgg: $('#title-easter-egg')
   };
 
   /* ================================================================ */
-  /*  Settings helpers                                                */
+  /*  Settings helpers
   /* ================================================================ */
 
   async function loadSettings() {
@@ -117,50 +107,27 @@
     return chrome.storage.local.set({ settings });
   }
 
-  /** Apply settings object to the UI controls. */
   function applySettingsToUI(s) {
     el.orgMode.value          = s.orgMode;
     el.toggleStatus.checked   = s.includeStatusTag;
     el.toggleDesc.checked     = s.includeDescription;
-    applyTheme(s.theme);
+    
+    const isAutoSaveOn = s.autoSave !== false; // defaults to true
+    el.powerToggle.setAttribute('aria-pressed', isAutoSaveOn ? 'true' : 'false');
+    el.powerToggleState.textContent = isAutoSaveOn ? 'ON' : 'OFF';
   }
 
-  /** Read current UI control values into a settings object. */
   function readSettingsFromUI() {
     return {
+      autoSave:           el.powerToggle.getAttribute('aria-pressed') === 'true',
       orgMode:            el.orgMode.value,
       includeStatusTag:   el.toggleStatus.checked,
-      includeDescription: el.toggleDesc.checked,
-      theme:              document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
+      includeDescription: el.toggleDesc.checked
     };
   }
 
   /* ================================================================ */
-  /*  Theme                                                           */
-  /* ================================================================ */
-
-  function applyTheme(theme) {
-    let resolved = theme;
-    if (theme === 'system') {
-      resolved = window.matchMedia('(prefers-color-scheme: light)').matches
-        ? 'light'
-        : 'dark';
-    }
-    document.documentElement.dataset.theme = resolved;
-  }
-
-  function toggleTheme() {
-    const current = document.documentElement.dataset.theme;
-    const next = current === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    // Persist
-    const settings = readSettingsFromUI();
-    settings.theme = next;
-    saveSettings(settings);
-  }
-
-  /* ================================================================ */
-  /*  Folder picker                                                   */
+  /*  Folder picker
   /* ================================================================ */
 
   async function pickFolder() {
@@ -168,10 +135,9 @@
       const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
       await saveDirectoryHandle(handle);
       showFolderActive(handle.name);
-      snackbar('Folder selected ✓');
+      snackbar('Folder selected');
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.error('[LeetVault] Folder pick failed:', err);
         snackbar('Folder selection failed', true);
       }
     }
@@ -180,30 +146,31 @@
   async function reconnectFolder() {
     const handle = await getDirectoryHandle();
     if (!handle) {
-      // No handle at all — treat like a fresh pick
       return pickFolder();
     }
     try {
       const perm = await handle.requestPermission({ mode: 'readwrite' });
       if (perm === 'granted') {
         showFolderActive(handle.name);
-        snackbar('Reconnected ✓');
+        snackbar('Reconnected');
       } else {
-        snackbar('Permission denied — try again', true);
+        snackbar('Permission denied', true);
       }
     } catch {
-      snackbar('Reconnect failed — try choosing a new folder', true);
+      snackbar('Reconnect failed', true);
     }
   }
 
   /* ================================================================ */
-  /*  Folder UI states                                                */
+  /*  Folder UI states
   /* ================================================================ */
 
   function showFolderEmpty() {
     el.folderEmpty.hidden  = false;
     el.folderActive.hidden = true;
     el.folderReconn.hidden = true;
+    el.folderStatusBar.textContent = "Not Connected";
+    el.folderStatusBar.className = "status-bar__item mono";
   }
 
   function showFolderActive(name) {
@@ -212,28 +179,28 @@
     el.folderReconn.hidden = true;
     el.folderPath.textContent = name;
     el.folderPath.title       = name;
-    el.badgeOk.hidden   = false;
-    el.badgeWarn.hidden  = true;
+    el.folderStatusBar.textContent = name;
+    el.folderStatusBar.className = "status-bar__item mono text-easy";
   }
 
   function showFolderNeedsReconnect(name) {
     if (name) {
-      // Show the active state but with a warning badge
       el.folderEmpty.hidden  = true;
       el.folderActive.hidden = false;
       el.folderReconn.hidden = true;
       el.folderPath.textContent = name;
       el.folderPath.title       = name;
-      el.badgeOk.hidden   = true;
-      el.badgeWarn.hidden  = false;
+      el.folderStatusBar.textContent = "Access Expired";
+      el.folderStatusBar.className = "status-bar__item mono text-error";
     } else {
       el.folderEmpty.hidden  = true;
       el.folderActive.hidden = true;
       el.folderReconn.hidden = false;
+      el.folderStatusBar.textContent = "Access Expired";
+      el.folderStatusBar.className = "status-bar__item mono text-error";
     }
   }
 
-  /** Probe the stored handle and set the correct folder UI state. */
   async function refreshFolderState() {
     try {
       const handle = await getDirectoryHandle();
@@ -251,47 +218,128 @@
   }
 
   /* ================================================================ */
-  /*  Stats                                                           */
+  /*  Manual Save
   /* ================================================================ */
 
-  async function refreshStats() {
-    const result = await chrome.storage.local.get('stats');
-    const stats  = result.stats || { totalSaved: 0, byDifficulty: {}, solveDates: [] };
+  let activeTabId = null;
 
-    el.statTotal.textContent  = stats.totalSaved;
-    el.statEasy.textContent   = stats.byDifficulty.Easy   || 0;
-    el.statMedium.textContent = stats.byDifficulty.Medium || 0;
-    el.statHard.textContent   = stats.byDifficulty.Hard   || 0;
-
-    const streak = computeStreak(stats.solveDates || []);
-    el.streakValue.textContent = `${streak}-day streak`;
+  async function checkActiveTab() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab && tab.url && tab.url.includes('leetcode.com/problems/')) {
+      el.manualSaveBtn.disabled = false;
+      activeTabId = tab.id;
+    } else {
+      el.manualSaveBtn.disabled = true;
+      activeTabId = null;
+    }
   }
 
-  /**
-   * Compute the current consecutive-day streak ending today (or yesterday).
-   */
+  async function handleManualSave() {
+    if (!activeTabId) return;
+
+    el.manualSaveBtn.disabled = true;
+    el.manualSaveBtn.textContent = 'Saving...';
+
+    try {
+      const res = await chrome.tabs.sendMessage(activeTabId, { type: 'MANUAL_SAVE' });
+      if (res && res.success) {
+        el.manualSaveBtn.textContent = 'Saved';
+      } else {
+        const errMsg = res?.error || 'Unknown error';
+        el.manualSaveBtn.textContent = 'Error';
+        snackbar(`Save failed: ${errMsg}`, true);
+      }
+    } catch (err) {
+      el.manualSaveBtn.textContent = 'Error';
+      if (err.message.includes('Receiving end does not exist')) {
+        snackbar('Error: refresh tab to update script', true);
+      } else {
+        snackbar(`Save failed: ${err.message}`, true);
+      }
+    }
+
+    setTimeout(() => {
+      el.manualSaveBtn.textContent = 'Save Now';
+      el.manualSaveBtn.disabled = false;
+    }, 1500);
+  }
+
+  /* ================================================================ */
+  /*  Stats Animation
+  /* ================================================================ */
+
+  function animateValue(obj, start, end, duration) {
+    if (start === end) return;
+    let startTimestamp = null;
+    const step = (timestamp) => {
+      if (!startTimestamp) startTimestamp = timestamp;
+      const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+      obj.textContent = Math.floor(progress * (end - start) + start);
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      } else {
+        obj.textContent = end;
+      }
+    };
+    window.requestAnimationFrame(step);
+  }
+
+  /* ================================================================ */
+  /*  Stats Logic
+  /* ================================================================ */
+
+  let oldStats = null;
+
+  async function refreshStats(animate = false) {
+    const result = await chrome.storage.local.get('stats');
+    const stats = result.stats || { records: {}, solveDates: [] };
+    const records = Object.values(stats.records || {});
+
+    let total = 0, easy = 0, med = 0, hard = 0;
+    for (const rec of records) {
+      if (rec.firstAcceptedAt) {
+        total++;
+        if (rec.difficulty === 'Easy') easy++;
+        else if (rec.difficulty === 'Medium') med++;
+        else if (rec.difficulty === 'Hard') hard++;
+      }
+    }
+    
+    const streak = computeStreak(stats.solveDates || []);
+    const streakStr = `${streak} Day Streak`;
+
+    if (animate && oldStats) {
+      animateValue(el.statTotal, oldStats.total, total, 500);
+      animateValue(el.statEasy, oldStats.easy, easy, 500);
+      animateValue(el.statMedium, oldStats.med, med, 500);
+      animateValue(el.statHard, oldStats.hard, hard, 500);
+      el.streakValue.textContent = streakStr;
+    } else {
+      el.statTotal.textContent  = total;
+      el.statEasy.textContent   = easy;
+      el.statMedium.textContent = med;
+      el.statHard.textContent   = hard;
+      el.streakValue.textContent = streakStr;
+    }
+    
+    oldStats = { total, easy, med, hard, streak };
+  }
+
   function computeStreak(dates) {
     if (!dates.length) return 0;
-
-    const sorted = [...new Set(dates)].sort().reverse(); // newest first
+    const sorted = [...new Set(dates)].sort().reverse();
     const today     = isoToday();
     const yesterday = isoDay(-1);
 
-    // Streak must include today or yesterday to count
     if (sorted[0] !== today && sorted[0] !== yesterday) return 0;
 
     let streak = 1;
     for (let i = 1; i < sorted.length; i++) {
-      const expected = isoDay(-daysBetween(today, sorted[0]) - i);
-      // Simpler: check consecutive by diffing adjacent entries
       const prev = new Date(sorted[i - 1] + 'T00:00:00');
       const curr = new Date(sorted[i]     + 'T00:00:00');
       const diffDays = Math.round((prev - curr) / 86400000);
-      if (diffDays === 1) {
-        streak++;
-      } else {
-        break;
-      }
+      if (diffDays === 1) streak++;
+      else break;
     }
     return streak;
   }
@@ -306,19 +354,12 @@
     return d.toISOString().slice(0, 10);
   }
 
-  function daysBetween(a, b) {
-    return Math.round(
-      (new Date(a + 'T00:00:00') - new Date(b + 'T00:00:00')) / 86400000,
-    );
-  }
-
   /* ================================================================ */
-  /*  Config export / import                                          */
+  /*  Config export / import
   /* ================================================================ */
 
   async function exportConfig() {
     const settings = await loadSettings();
-    // Strip theme resolution — export raw value
     const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -326,7 +367,7 @@
     a.download = 'leetvault-config.json';
     a.click();
     URL.revokeObjectURL(url);
-    snackbar('Config exported ✓');
+    snackbar('Config exported');
   }
 
   function importConfig() {
@@ -337,38 +378,27 @@
     try {
       const text = await file.text();
       const json = JSON.parse(text);
-
-      // Validate shape
-      const valid = typeof json === 'object' && json !== null;
-      if (!valid) throw new Error('Invalid config file');
-
+      if (typeof json !== 'object' || json === null) throw new Error('Invalid config');
       const merged = { ...DEFAULT_SETTINGS, ...json };
-
-      // Validate orgMode
       const validModes = ['flat', 'difficulty', 'category', 'hybrid'];
       if (!validModes.includes(merged.orgMode)) merged.orgMode = 'flat';
-
-      // Coerce booleans
       merged.includeStatusTag   = Boolean(merged.includeStatusTag);
       merged.includeDescription = Boolean(merged.includeDescription);
-
       await saveSettings(merged);
       applySettingsToUI(merged);
-      snackbar('Config imported ✓');
+      snackbar('Config imported');
     } catch (err) {
-      console.error('[LeetVault] Import error:', err);
       snackbar('Invalid config file', true);
     }
   }
 
   /* ================================================================ */
-  /*  Stats download                                                  */
+  /*  Stats download
   /* ================================================================ */
 
   async function downloadStats() {
     const result = await chrome.storage.local.get('stats');
-    const stats  = result.stats || { totalSaved: 0, byDifficulty: {}, solveDates: [] };
-
+    const stats  = result.stats || { records: {}, solveDates: [] };
     stats.exportedAt    = new Date().toISOString();
     stats.currentStreak = computeStreak(stats.solveDates || []);
 
@@ -379,15 +409,14 @@
     a.download = 'leetvault-stats.json';
     a.click();
     URL.revokeObjectURL(url);
-    snackbar('Stats downloaded ✓');
+    snackbar('Stats downloaded');
   }
 
   /* ================================================================ */
-  /*  Snackbar                                                        */
+  /*  Snackbar
   /* ================================================================ */
 
   let snackbarTimer = null;
-
   function snackbar(msg, isError = false) {
     clearTimeout(snackbarTimer);
     el.snackbar.textContent = msg;
@@ -401,33 +430,62 @@
   }
 
   /* ================================================================ */
-  /*  Event wiring                                                    */
+  /*  Event wiring
   /* ================================================================ */
 
   function bindEvents() {
-    // Theme
-    el.themeToggle.addEventListener('click', toggleTheme);
-
-    // Folder
     el.pickFolder.addEventListener('click',   pickFolder);
     el.changeFolder.addEventListener('click', pickFolder);
     el.reconnect.addEventListener('click',    reconnectFolder);
+    el.manualSaveBtn.addEventListener('click', handleManualSave);
 
-    // Settings — persist on every change
+    el.powerToggle.addEventListener('click', async () => {
+      const isPressed = el.powerToggle.getAttribute('aria-pressed') === 'true';
+      el.powerToggle.setAttribute('aria-pressed', isPressed ? 'false' : 'true');
+      el.powerToggleState.textContent = isPressed ? 'OFF' : 'ON';
+      await persistSettings();
+    });
+
     el.orgMode.addEventListener('change', persistSettings);
     el.toggleStatus.addEventListener('change', persistSettings);
     el.toggleDesc.addEventListener('change', persistSettings);
 
-    // Config
     el.exportBtn.addEventListener('click', exportConfig);
     el.importBtn.addEventListener('click', importConfig);
     el.importFile.addEventListener('change', (e) => {
       if (e.target.files[0]) handleImportFile(e.target.files[0]);
-      e.target.value = '';   // reset so the same file can be re-imported
+      e.target.value = '';
+    });
+    el.statsBtn.addEventListener('click', downloadStats);
+    
+    // Easter Eggs
+    let hardHoverTimer;
+    el.statHard.addEventListener('mouseenter', () => {
+      hardHoverTimer = setTimeout(() => {
+        el.statHard.classList.add('bleed-red');
+        el.statHard.textContent = '#FF0000';
+      }, 3000);
+    });
+    el.statHard.addEventListener('mouseleave', () => {
+      clearTimeout(hardHoverTimer);
+      el.statHard.classList.remove('bleed-red');
+      // Only refresh value if it was changed
+      if (el.statHard.textContent === '#FF0000') {
+        refreshStats(false);
+      }
     });
 
-    // Stats download
-    el.statsBtn.addEventListener('click', downloadStats);
+    let titleClicks = 0;
+    let titleClickTimer;
+    el.titleEasterEgg.addEventListener('click', () => {
+      titleClicks++;
+      clearTimeout(titleClickTimer);
+      if (titleClicks >= 5) {
+        document.body.classList.toggle('sudo-mode');
+        titleClicks = 0;
+      }
+      titleClickTimer = setTimeout(() => { titleClicks = 0; }, 1000);
+    });
   }
 
   async function persistSettings() {
@@ -436,7 +494,43 @@
   }
 
   /* ================================================================ */
-  /*  Init                                                            */
+  /*  Live Logging
+  /* ================================================================ */
+
+  let inlineLogTimer = null;
+  function showInlineLog(slug) {
+    clearTimeout(inlineLogTimer);
+    el.inlineLog.textContent = `Saved ${slug}`;
+    el.inlineLog.classList.add('visible');
+    inlineLogTimer = setTimeout(() => {
+      el.inlineLog.classList.remove('visible');
+    }, 2000);
+  }
+
+  function handleStorageChange(changes) {
+    if (changes.stats) {
+      refreshStats(true);
+      
+      const oldVal = changes.stats.oldValue || { records: {} };
+      const newVal = changes.stats.newValue || { records: {} };
+      
+      for (const slug of Object.keys(newVal.records)) {
+        const newRec = newVal.records[slug];
+        const oldRec = oldVal.records[slug];
+        
+        if (!oldRec || newRec.attempts.length > oldRec.attempts.length) {
+          const latestAttempt = newRec.attempts[newRec.attempts.length - 1];
+          if (latestAttempt.action === 'submit' && latestAttempt.result === 'Accepted') {
+            showInlineLog(slug);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /* ================================================================ */
+  /*  Init
   /* ================================================================ */
 
   async function init() {
@@ -444,7 +538,10 @@
     applySettingsToUI(settings);
     bindEvents();
     await refreshFolderState();
-    await refreshStats();
+    await refreshStats(false);
+    await checkActiveTab();
+    
+    chrome.storage.onChanged.addListener(handleStorageChange);
   }
 
   init().catch((err) => console.error('[LeetVault] Popup init error:', err));

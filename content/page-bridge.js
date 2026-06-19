@@ -14,6 +14,23 @@
 (() => {
   'use strict';
 
+  const originalFetch = window.fetch;
+  window.fetch = async function(...args) {
+    const response = await originalFetch.apply(this, args);
+    try {
+      const url = args[0]?.url || args[0];
+      if (typeof url === 'string' && url.includes('/check/')) {
+        const cloned = response.clone();
+        cloned.json().then(data => {
+          if (data && data.state === 'SUCCESS') {
+            document.dispatchEvent(new CustomEvent('leetvault:result', { detail: data }));
+          }
+        }).catch(() => {});
+      }
+    } catch (e) {}
+    return response;
+  };
+
   document.addEventListener('leetvault:request', (e) => {
     const { requestId, action } = e.detail;
     const response = { requestId };

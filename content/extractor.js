@@ -114,6 +114,78 @@ LV.extractor = (() => {
   }
 
   /* ---------------------------------------------------------------- */
+  /*  Status Tag (Run/Submit result)                                  */
+  /* ---------------------------------------------------------------- */
+
+  function extractStatusTag() {
+    // Known status text from the LeetCode results panel
+    const statuses = [
+      'Accepted', 'Wrong Answer', 'Runtime Error', 'Time Limit Exceeded',
+      'Memory Limit Exceeded', 'Compile Error', 'Output Limit Exceeded'
+    ];
+    
+    // The result is usually in a coloured span/div in the bottom pane.
+    // data-e2e-locator is sometimes present, or specific class names.
+    const selectors = [
+      '[data-e2e-locator="submission-result"]',
+      'div[class*="text-green-s"]',   // typically Accepted
+      'div[class*="text-red-s"]',     // typically WA/RE/TLE
+      'span[class*="text-green-s"]',
+      'span[class*="text-red-s"]',
+    ];
+
+    for (const sel of selectors) {
+      const els = document.querySelectorAll(sel);
+      for (const el of els) {
+        const text = el.textContent.trim();
+        if (statuses.includes(text)) {
+          return text;
+        }
+      }
+    }
+    return null;
+  }
+
+  /* ---------------------------------------------------------------- */
+  /*  Description & Testcases                                         */
+  /* ---------------------------------------------------------------- */
+
+  function extractDescription() {
+    // Problem description is usually in a specific div
+    const selectors = [
+      '[data-track-load="description_content"]',
+      'div[class*="content__"]',
+      'div[class*="question-content"]',
+    ];
+
+    for (const sel of selectors) {
+      const el = document.querySelector(sel);
+      if (el) {
+        // Simple HTML stripping — get text content, collapsing multiple blank lines
+        let text = el.innerText || el.textContent;
+        text = text.replace(/\n{3,}/g, '\n\n').trim();
+        return text;
+      }
+    }
+    return null;
+  }
+
+  function extractTestcases() {
+    // Sample testcases are usually in pre blocks
+    const testcases = [];
+    const pres = document.querySelectorAll('pre');
+    
+    for (let i = 0; i < pres.length; i++) {
+      const text = pres[i].textContent.trim();
+      // Usually starts with "Input:"
+      if (text.toLowerCase().includes('input:')) {
+        testcases.push(text);
+      }
+    }
+    return testcases;
+  }
+
+  /* ---------------------------------------------------------------- */
   /*  Language (DOM fallback — used alongside Monaco languageId)       */
   /* ---------------------------------------------------------------- */
 
@@ -204,6 +276,12 @@ LV.extractor = (() => {
     const editor = await requestEditorData();
     if (!editor.code) throw new Error('Could not read code from editor.');
 
+    // Optional scraping (fail silently)
+    let statusTag = null, description = null, testcases = [];
+    try { statusTag = extractStatusTag(); } catch (e) {}
+    try { description = extractDescription(); } catch (e) {}
+    try { testcases = extractTestcases(); } catch (e) {}
+
     return {
       slug,
       problemNum:      extractProblemNumber(),
@@ -212,6 +290,9 @@ LV.extractor = (() => {
       code:            editor.code,
       languageId:      editor.languageId,
       languageDisplay: extractLanguageFromDOM(),
+      statusTag,
+      description,
+      testcases,
     };
   }
 
